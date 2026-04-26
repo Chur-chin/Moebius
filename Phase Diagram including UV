@@ -1,0 +1,40 @@
+# -----------------------------
+# Phase Diagram
+# -----------------------------
+uv_vals = np.linspace(0, 10, 400)  # mW/cm^2
+rf_vals = np.linspace(0, 5, 400)
+
+RF2, UV = np.meshgrid(rf_vals, uv_vals)
+
+# 평균 wavelength에서 대표값 사용
+lambda0 = 6e-6
+n0 = 30
+k0 = (2*np.pi / lambda0) * n0
+
+phi_total2 = k0*L + alpha*RF2 + beta*UV
+
+eta2 = np.abs((phi_total2 % (2*np.pi)) - np.pi)
+
+# Phase classification
+phase_map = np.zeros_like(eta2)
+phase_map[eta2 < 0.2] = 1        # Möbius
+phase_map[(eta2 >= 0.2) & (eta2 < 1.0)] = 2  # transition
+
+# Noise 추가
+phase_map = phase_map + 0.1*np.random.randn(*phase_map.shape)
+
+plt.figure(figsize=(6,5))
+plt.imshow(phase_map,
+           extent=[rf_vals.min(), rf_vals.max(),
+                   uv_vals.min(), uv_vals.max()],
+           origin='lower',
+           aspect='auto')
+
+plt.xlabel('RF Amplitude')
+plt.ylabel('UV Intensity (mW/cm²)')
+plt.title('Phase Diagram (Normal / Möbius / Transition)')
+plt.colorbar(label='Phase Region')
+
+plt.tight_layout()
+plt.savefig('figure2_phase_diagram_physical.svg')
+plt.close()
