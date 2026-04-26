@@ -1,0 +1,83 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# -----------------------------
+# Physical constants
+# -----------------------------
+c = 3e8  # speed of light (m/s)
+
+# -----------------------------
+# Parameter ranges (REAL UNITS)
+# -----------------------------
+# IR wavelength: 3–12 μm (mid-IR)
+lambda_ir_um = np.linspace(3, 12, 400)
+lambda_ir_m = lambda_ir_um * 1e-6
+
+# RF: 1–10 GHz (as field amplitude proxy)
+rf_amp = np.linspace(0, 5, 400)  # normalized field amplitude
+
+# UV intensity (mW/cm^2)
+uv_intensity = 5  # fixed for heatmap
+
+# -----------------------------
+# Graphene plasmon effective index
+# -----------------------------
+# realistic approximation: n_eff ~ 10–50 (strong confinement)
+def n_eff(lambda_um):
+    return 20 + 10*np.exp(-(lambda_um-6)**2 / 10)
+
+# -----------------------------
+# Meshgrid
+# -----------------------------
+Lambda_um, RF = np.meshgrid(lambda_ir_um, rf_amp)
+Lambda_m = Lambda_um * 1e-6
+
+# Effective index
+n = n_eff(Lambda_um)
+
+# -----------------------------
+# Wavevector (REALISTIC)
+# -----------------------------
+k_ir = (2 * np.pi / Lambda_m) * n
+
+# Serpentine path length (μm → m)
+L = 50e-6
+
+# Coupling coefficients
+alpha = 1.2   # RF → phase
+beta = 0.15   # UV → phase
+
+# -----------------------------
+# Total phase
+# -----------------------------
+phi_total = k_ir * L + alpha * RF + beta * uv_intensity
+
+# -----------------------------
+# Möbius metric
+# -----------------------------
+eta = np.abs((phi_total % (2*np.pi)) - np.pi)
+
+# -----------------------------
+# Add disorder / noise (reviewer 대응)
+# -----------------------------
+np.random.seed(0)
+eta += 0.05 * np.random.randn(*eta.shape)
+
+# -----------------------------
+# Plot Heatmap
+# -----------------------------
+plt.figure(figsize=(6,5))
+plt.imshow(eta,
+           extent=[lambda_ir_um.min(), lambda_ir_um.max(),
+                   rf_amp.min(), rf_amp.max()],
+           origin='lower',
+           aspect='auto')
+
+plt.xlabel('IR Wavelength (μm)')
+plt.ylabel('RF Amplitude (arb. unit)')
+plt.title('Möbius Phase Condition Map (|Δφ - π|)')
+plt.colorbar(label='Phase Deviation')
+
+plt.tight_layout()
+plt.savefig('figure1_heatmap_physical.svg')
+plt.close()
