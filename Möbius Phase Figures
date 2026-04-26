@@ -1,0 +1,85 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# -----------------------------
+# Parameters
+# -----------------------------
+L = 10  # serpentine path length
+alpha = 1.0  # RF coupling coefficient
+beta = 2.0   # UV coupling coefficient
+
+# Axes
+lambda_ir = np.linspace(1, 10, 300)  # arbitrary units
+rf_amp = np.linspace(0, 5, 300)
+
+Lambda, RF = np.meshgrid(lambda_ir, rf_amp)
+
+# Derived quantities
+k_ir = 2 * np.pi / Lambda
+uv_intensity = 0.5  # fixed for heatmap
+
+# Phase calculation
+phi_total = k_ir * L + alpha * RF + beta * uv_intensity
+
+# Möbius condition metric
+eta = np.abs((phi_total % (2*np.pi)) - np.pi)
+
+# -----------------------------
+# Figure 1: Heatmap
+# -----------------------------
+plt.figure()
+plt.imshow(eta, extent=[lambda_ir.min(), lambda_ir.max(), rf_amp.min(), rf_amp.max()], origin='lower', aspect='auto')
+plt.xlabel('IR Wavelength')
+plt.ylabel('RF Amplitude')
+plt.title('Multi-frequency Coupling Heatmap (|Δφ - π|)')
+plt.colorbar(label='Phase Deviation')
+plt.savefig('figure1_heatmap.svg')
+plt.close()
+
+# -----------------------------
+# Figure 2: Phase Diagram
+# -----------------------------
+uv_vals = np.linspace(0, 2, 300)
+rf_vals = np.linspace(0, 5, 300)
+RF2, UV = np.meshgrid(rf_vals, uv_vals)
+
+phi_total2 = k_ir.mean()*L + alpha*RF2 + beta*UV
+eta2 = np.abs((phi_total2 % (2*np.pi)) - np.pi)
+
+phase_map = np.zeros_like(eta2)
+phase_map[eta2 < 0.2] = 1  # Möbius phase
+phase_map[(eta2 >= 0.2) & (eta2 < 1.0)] = 2  # transition
+
+plt.figure()
+plt.imshow(phase_map, extent=[rf_vals.min(), rf_vals.max(), uv_vals.min(), uv_vals.max()], origin='lower', aspect='auto')
+plt.xlabel('RF Amplitude')
+plt.ylabel('UV Intensity')
+plt.title('Phase Diagram')
+plt.colorbar(label='0: Normal, 1: Möbius, 2: Transition')
+plt.savefig('figure2_phase_diagram.svg')
+plt.close()
+
+# -----------------------------
+# Figure 3: XOR Simulation
+# -----------------------------
+inputs = [(0,0),(0,np.pi),(np.pi,0),(np.pi,np.pi)]
+outputs = []
+
+for a, b in inputs:
+    phi_m = np.pi  # Möbius condition
+    val = np.cos(a + b + phi_m)
+    outputs.append(1 if val > 0 else 0)
+
+# Plot truth table
+fig, ax = plt.subplots()
+ax.axis('off')
+
+cell_text = [[str(i[0]), str(i[1]), str(o)] for i, o in zip(inputs, outputs)]
+columns = ['A', 'B', 'Output']
+
+ax.table(cellText=cell_text, colLabels=columns, loc='center')
+plt.title('XOR via Möbius Phase Flip')
+plt.savefig('figure3_xor.svg')
+plt.close()
+
+print("Figures saved: figure1_heatmap.svg, figure2_phase_diagram.svg, figure3_xor.svg")
