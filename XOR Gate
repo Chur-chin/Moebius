@@ -1,0 +1,30 @@
+# -----------------------------
+# XOR with noise + phase drift
+# -----------------------------
+inputs = [(0,0),(0,np.pi),(np.pi,0),(np.pi,np.pi)]
+outputs = []
+
+for a, b in inputs:
+    phi_m = np.pi
+    
+    # RF drift + UV perturbation
+    rf_noise = np.random.normal(0, 0.1)
+    uv_shift = beta * 5
+    
+    val = np.cos(a + b + phi_m + rf_noise + uv_shift)
+    outputs.append(1 if val > 0 else 0)
+
+# Plot
+fig, ax = plt.subplots()
+ax.axis('off')
+
+cell_text = [[str(int(i[0]/np.pi)), str(int(i[1]/np.pi)), str(o)]
+             for i, o in zip(inputs, outputs)]
+
+columns = ['A', 'B', 'Output']
+
+ax.table(cellText=cell_text, colLabels=columns, loc='center')
+plt.title('XOR via Möbius Phase Flip (with noise)')
+
+plt.savefig('figure3_xor_physical.svg')
+plt.close()
