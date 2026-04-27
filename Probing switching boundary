@@ -1,0 +1,33 @@
+ridge_sets = []
+
+uv_list = [0, 3, 6, 9]
+
+for uv in uv_list:
+    phi_total_uv = k_ir * L + alpha * RF + beta * uv
+    eta_uv = np.abs((phi_total_uv % (2*np.pi)) - np.pi)
+
+    # ridge 추출
+    ridge_lambda_uv = []
+    for i in range(eta_uv.shape[0]):
+        idx = np.argmin(eta_uv[i, :])
+        ridge_lambda_uv.append(lambda_ir_um[idx])
+
+    ridge_sets.append(ridge_lambda_uv)
+
+# -----------------------------
+# Plot
+# -----------------------------
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(6,5))
+
+for i, uv in enumerate(uv_list):
+    plt.plot(ridge_sets[i], rf_amp, label=f'UV={uv}')
+
+plt.xlabel('IR Wavelength (μm)')
+plt.ylabel('RF Amplitude')
+plt.title('UV-induced Ridge Shift (Switching Boundary)')
+plt.legend()
+
+plt.savefig('figure_uv_ridge_shift.svg')
+plt.show()
