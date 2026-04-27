@@ -1,0 +1,81 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+
+# -----------------------------
+# (이미 존재한다고 가정)
+# ridge_rf, ridge_lambda
+# -----------------------------
+
+# 안전장치 (혹시 없으면 에러 방지)
+ridge_rf = np.array(ridge_rf)
+ridge_lambda = np.array(ridge_lambda)
+
+# -----------------------------
+# Physical constants
+# -----------------------------
+L = 50e-6
+n_eff = 30  # 평균 effective index
+uv_fixed = 5
+
+# -----------------------------
+# Model function
+# -----------------------------
+def ridge_model(rf, alpha, beta):
+    k_est = (np.pi - alpha * rf - beta * uv_fixed) / L
+    lambda_est = 2 * np.pi / (k_est / n_eff)
+    return lambda_est * 1e6  # m → μm
+
+# -----------------------------
+# Fitting
+# -----------------------------
+params, _ = curve_fit(ridge_model, ridge_rf, ridge_lambda)
+
+alpha_fit, beta_fit = params
+
+# Fit curve
+rf_fit = np.linspace(ridge_rf.min(), ridge_rf.max(), 300)
+lambda_fit = ridge_model(rf_fit, alpha_fit, beta_fit)
+
+# Residual
+lambda_pred = ridge_model(ridge_rf, alpha_fit, beta_fit)
+residual = ridge_lambda - lambda_pred
+
+# R^2 계산
+ss_res = np.sum(residual**2)
+ss_tot = np.sum((ridge_lambda - np.mean(ridge_lambda))**2)
+r2 = 1 - ss_res/ss_tot
+
+# -----------------------------
+# Plot (2-panel)
+# -----------------------------
+fig, axes = plt.subplots(2, 1, figsize=(6,8))
+
+# --- (A) Fit curve ---
+axes[0].scatter(ridge_rf, ridge_lambda, s=10, label='Data')
+axes[0].plot(rf_fit, lambda_fit, linewidth=2, label='Fit')
+
+axes[0].set_xlabel('RF Amplitude')
+axes[0].set_ylabel('IR Wavelength (μm)')
+axes[0].set_title(f'Ridge Fit (R² = {r2:.4f})')
+
+axes[0].legend()
+
+# --- (B) Residual ---
+axes[1].scatter(ridge_rf, residual, s=10)
+
+axes[1].axhline(0, linestyle='--')
+axes[1].set_xlabel('RF Amplitude')
+axes[1].set_ylabel('Residual (μm)')
+axes[1].set_title('Fit Residual')
+
+plt.tight_layout()
+plt.savefig('figure3_fit_residual.svg')
+plt.show()
+
+# -----------------------------
+# Print fitted params
+# -----------------------------
+print("Fitted alpha:", alpha_fit)
+print("Fitted beta:", beta_fit)
+print("R^2:", r2)
