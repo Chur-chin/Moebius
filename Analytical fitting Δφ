@@ -1,0 +1,22 @@
+from scipy.optimize import curve_fit
+
+# 모델 함수
+def ridge_model(rf, alpha_fit, beta_fit):
+    # 평균 UV 사용
+    uv = 5
+    
+    k_est = (np.pi - alpha_fit * rf - beta_fit * uv) / L
+    
+    # λ = 2π / (k / n_eff)
+    n = 30  # 평균값
+    lambda_est = 2 * np.pi / (k_est / n)
+    
+    return lambda_est * 1e6  # m → μm
+
+# fitting
+params, _ = curve_fit(ridge_model, ridge_rf, ridge_lambda)
+
+alpha_fit, beta_fit = params
+
+print("Fitted alpha:", alpha_fit)
+print("Fitted beta:", beta_fit)
