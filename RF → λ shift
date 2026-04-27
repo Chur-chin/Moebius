@@ -1,0 +1,11 @@
+import numpy as np
+from scipy.stats import linregress
+
+# ridge_lambda, ridge_rf (이미 추출된 값 사용)
+
+# 선형 근사: λ = a * RF + b
+slope, intercept, r_value, p_value, std_err = linregress(ridge_rf, ridge_lambda)
+
+print("Slope (dλ/dRF):", slope, "μm per RF unit")
+print("Intercept:", intercept)
+print("R^2:", r_value**2)
