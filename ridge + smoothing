@@ -1,0 +1,24 @@
+from scipy.ndimage import gaussian_filter1d
+
+# smoothing
+ridge_lambda_smooth = gaussian_filter1d(ridge_lambda, sigma=3)
+
+plt.figure(figsize=(6,5))
+
+plt.imshow(eta,
+           extent=[lambda_ir_um.min(), lambda_ir_um.max(),
+                   rf_amp.min(), rf_amp.max()],
+           origin='lower',
+           aspect='auto')
+
+plt.plot(ridge_lambda_smooth, ridge_rf, linewidth=2)
+
+plt.xlabel('IR Wavelength (μm)')
+plt.ylabel('RF Amplitude')
+plt.title('Smoothed Möbius Phase Boundary')
+
+plt.colorbar(label='|Δφ - π|')
+
+plt.tight_layout()
+plt.savefig('figure1_ridge_smooth.svg')
+plt.show()
