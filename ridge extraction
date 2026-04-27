@@ -1,0 +1,41 @@
+# -----------------------------
+# Ridge extraction (η 최소값)
+# -----------------------------
+ridge_lambda = []
+ridge_rf = []
+
+for i in range(eta.shape[0]):  # RF 방향
+    row = eta[i, :]
+    
+    # 최소값 위치
+    idx = np.argmin(row)
+    
+    ridge_lambda.append(lambda_ir_um[idx])
+    ridge_rf.append(rf_amp[i])
+
+ridge_lambda = np.array(ridge_lambda)
+ridge_rf = np.array(ridge_rf)
+
+# -----------------------------
+# Overlay plot
+# -----------------------------
+plt.figure(figsize=(6,5))
+
+plt.imshow(eta,
+           extent=[lambda_ir_um.min(), lambda_ir_um.max(),
+                   rf_amp.min(), rf_amp.max()],
+           origin='lower',
+           aspect='auto')
+
+# Ridge overlay
+plt.plot(ridge_lambda, ridge_rf, linewidth=2)
+
+plt.xlabel('IR Wavelength (μm)')
+plt.ylabel('RF Amplitude')
+plt.title('Möbius Phase Ridge Extraction')
+
+plt.colorbar(label='|Δφ - π|')
+
+plt.tight_layout()
+plt.savefig('figure1_with_ridge.svg')
+plt.show()
