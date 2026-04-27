@@ -1,0 +1,30 @@
+# -----------------------------
+# Threshold-based ridge
+# -----------------------------
+threshold = 0.1  # π 근처 허용 범위
+
+mask = eta < threshold
+
+ridge_lambda2 = Lambda_um[mask]
+ridge_rf2 = RF[mask]
+
+plt.figure(figsize=(6,5))
+
+plt.imshow(eta,
+           extent=[lambda_ir_um.min(), lambda_ir_um.max(),
+                   rf_amp.min(), rf_amp.max()],
+           origin='lower',
+           aspect='auto')
+
+# Scatter ridge
+plt.scatter(ridge_lambda2, ridge_rf2, s=1)
+
+plt.xlabel('IR Wavelength (μm)')
+plt.ylabel('RF Amplitude')
+plt.title('Möbius Phase Region (η ≈ 0)')
+
+plt.colorbar(label='|Δφ - π|')
+
+plt.tight_layout()
+plt.savefig('figure1_ridge_threshold.svg')
+plt.show()
