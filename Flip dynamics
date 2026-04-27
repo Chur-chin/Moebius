@@ -1,0 +1,45 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# -----------------------------
+# Time axis
+# -----------------------------
+t = np.linspace(0, 10, 1000)  # ns scale
+
+# -----------------------------
+# RF phase drift (slow)
+# -----------------------------
+rf_phase = 0.8 * np.sin(0.3 * t)
+
+# -----------------------------
+# UV pulse (trigger)
+# -----------------------------
+uv_pulse = np.exp(-((t - 5)**2) / 0.02)  # sharp pulse at t=5
+
+# -----------------------------
+# Total phase
+# -----------------------------
+phi = np.pi/2 + rf_phase + 1.5 * uv_pulse
+
+# -----------------------------
+# Output signal (interference)
+# -----------------------------
+output = np.cos(phi)
+
+# -----------------------------
+# Plot
+# -----------------------------
+plt.figure(figsize=(6,5))
+plt.plot(t, output, label='Output Signal')
+
+plt.axvline(5, linestyle='--', label='UV pulse')
+
+plt.xlabel('Time (ns)')
+plt.ylabel('Output (a.u.)')
+plt.title('Möbius Phase Flip Dynamics')
+
+plt.legend()
+plt.tight_layout()
+
+plt.savefig('figure_flip_dynamics.svg')
+plt.show()
