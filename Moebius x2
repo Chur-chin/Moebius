@@ -1,0 +1,171 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from numpy.fft import fft2, ifft2, fftfreq
+
+# ====================== 파라미터 ======================
+Nx, Ny = 384, 192                    # 2의 거듭제곱에 가까운 크기가 FFT에 유리
+dt = 0.028
+feedback_strength = 0.35
+omega = 2 * np.pi * 2.1              # THz drive
+
+num_singularities = 3
+
+# ====================== Grid & Spectral Setup ======================
+x = np.linspace(0, Nx, Nx, endpoint=False)
+y = np.linspace(0, Ny, Ny, endpoint=False)
+X, Y = np.meshgrid(x, y)
+
+# Spectral wave numbers (k-space)
+kx = 2 * np.pi * fftfreq(Nx, d=1.0)
+ky = 2 * np.pi * fftfreq(Ny, d=1.0)
+KX, KY = np.meshgrid(kx, ky)
+K2 = KX**2 + KY**2
+
+# ====================== Serpentine Mask & Singularities ======================
+def create_serpentine_mask(nx, ny, num_turns=8, width=22):
+    mask = np.zeros((ny, nx), dtype=float)
+    for i in range(num_turns):
+        xs = int(i * nx / num_turns)
+        xe = int((i + 1) * nx / num_turns)
+        cy = ny//4 if i % 2 == 0 else 3*ny//4
+        phase = 2*np.pi*i/num_turns
+        path_y = cy + (ny//6)*np.sin(phase + 12*np.pi*np.arange(nx)/nx)
+        for xi in range(xs, min(xe, nx)):
+            yc = int(path_y[xi])
+            ymin = max(0, yc - width//2)
+            ymax = min(ny, yc + width//2 + 1)
+            mask[ymin:ymax, xi] = 1.0
+    return mask
+
+serpentine_mask = create_serpentine_mask(Nx, Ny)
+sing_positions = [(int((i+1)*Nx/(num_singularities+1)), Ny//2) for i in range(num_singularities)]
+
+# ====================== 초기 조건 ======================
+psi = np.zeros((Ny, Nx), dtype=complex)
+x0, y0 = Nx//5, Ny//2
+sigma = 14
+pulse = np.exp(-((X - x0)**2 + (Y - y0)**2) / (2*sigma**2))
+psi += 0.9 * pulse * np.exp(1j * 1.8 * X)
+
+psi_hat = fft2(psi)          # Spectral domain
+
+# Energy tracking
+energy_history = []
+time_steps = []
+
+# ====================== Pseudospectral Update ======================
+def pseudospectral_step(psi_hat, t):
+    # Inverse FFT to real space
+    psi_real = ifft2(psi_hat)
+    
+    # 1. THz Drive (real space)
+    drive = np.zeros_like(psi_real, dtype=float)
+    for sx, sy in sing_positions:
+        phase = omega * t + 0.6*(X - sx) + 0.9*(Y - sy)
+        drive += np.sin(phase) * np.exp(-((X-sx)**2 + (Y-sy)**2)/(2*40**2))
+    drive *= serpentine_mask * 0.065
+    
+    # 2. Linear wave propagation in spectral domain (exact dispersion)
+    linear_term = -K2 * psi_hat          # ∂²/∂t² Ψ = c² ∇² Ψ → spectral: -k²
+    
+    # 3. Nonlinear / Feedback terms in real space
+    psi_new_real = psi_real.copy()
+    
+    for sx, sy in sing_positions:
+        dist = np.sqrt((X - sx)**2 + (Y - sy)**2)
+        region = (dist < 34) & (serpentine_mask > 0.25)
+        
+        # Möbius phase inversion (chirality flip)
+        psi_new_real[region] *= np.exp(1j * np.pi)
+        
+        # Singularity compression + Hawking-like re-emission
+        compression = np.exp(-dist**2 / (2 * 27**2))
+        re_emitted = feedback_strength * compression * psi_new_real * np.exp(-1j * 2.3)
+        psi_new_real += re_emitted
+    
+    # Add drive
+    psi_new_real += drive * dt
+    
+    # Back to spectral domain
+    psi_new_hat = fft2(psi_new_real)
+    
+    # Time integration (2nd order leapfrog-like in spectral)
+    psi_hat_new = 2*psi_hat - psi_hat_prev + (dt**2) * linear_term + dt**2 * fft2(drive)
+    
+    # Weak damping for stability
+    psi_hat_new *= 0.995
+    
+    return psi_hat_new, psi_new_real
+
+# ====================== Visualization ======================
+fig = plt.figure(figsize=(15, 9))
+
+ax1 = fig.add_subplot(2, 2, 1)   # Intensity |Ψ|²
+ax2 = fig.add_subplot(2, 2, 2)   # Phase arg(Ψ)
+ax3 = fig.add_subplot(2, 2, 3)   # Energy conservation
+ax4 = fig.add_subplot(2, 2, 4)   # Singularity locations (reference)
+
+im_intensity = ax1.imshow(np.abs(ifft2(psi_hat))**2, cmap='inferno', origin='lower', vmin=0, vmax=1.3)
+ax1.set_title('|Ψ|²  Intensity')
+
+im_phase = ax2.imshow(np.angle(ifft2(psi_hat)), cmap='twilight', origin='lower', vmin=-np.pi, vmax=np.pi)
+ax2.set_title('Phase  arg(Ψ)  (Möbius twist visible)')
+
+line_energy, = ax3.plot([], [], 'c-', linewidth=2)
+ax3.set_title('Total Energy Conservation')
+ax3.set_xlabel('Time Step')
+ax3.set_ylabel('∫ |Ψ|² dA')
+ax3.grid(True, alpha=0.3)
+
+# Singularity markers
+for sx, sy in sing_positions:
+    ax1.plot(sx, sy, 'wo', markersize=7, markeredgecolor='cyan')
+    ax2.plot(sx, sy, 'wo', markersize=7, markeredgecolor='yellow')
+
+ax1.set_xlabel('x'); ax1.set_ylabel('y')
+ax2.set_xlabel('x'); ax2.set_ylabel('y')
+
+title = fig.suptitle(f"Möbius Pseudospectral Polaritonic Memory\n"
+                     f"feedback_strength = {feedback_strength:.2f} | Singularities = {num_singularities}", 
+                     fontsize=14)
+
+plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+# ====================== Animation ======================
+psi_hat_prev = psi_hat.copy()
+
+def animate(frame):
+    global psi_hat, psi_hat_prev
+    
+    t = frame * dt
+    psi_hat_new, psi_real = pseudospectral_step(psi_hat, t)
+    
+    psi_hat_prev = psi_hat.copy()
+    psi_hat = psi_hat_new
+    
+    # Intensity
+    intensity = np.abs(psi_real)**2
+    im_intensity.set_array(intensity)
+    
+    # Phase
+    phase = np.angle(psi_real)
+    im_phase.set_array(phase)
+    
+    # Energy
+    total_energy = np.sum(intensity)
+    energy_history.append(total_energy)
+    time_steps.append(frame)
+    
+    line_energy.set_data(time_steps, energy_history)
+    ax3.relim()
+    ax3.autoscale_view()
+    
+    title.set_text(f"Möbius Pseudospectral Recurrent System\n"
+                   f"feedback = {feedback_strength:.2f} | Frame: {frame} | Energy: {total_energy:.4f}")
+    
+    return [im_intensity, im_phase, line_energy, title]
+
+ani = animation.FuncAnimation(fig, animate, frames=800, interval=50, blit=False, repeat=False)
+
+plt.show()
