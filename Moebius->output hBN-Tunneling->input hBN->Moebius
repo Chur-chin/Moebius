@@ -1,0 +1,162 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from numpy.fft import fft2, ifft2, fftfreq
+
+# ====================== 파라미터 ======================
+Nx, Ny = 420, 200
+dt = 0.022
+
+feedback_strength = 0.36      # 1차 통과용
+second_pass_strength = 0.52   # 2회 통과용 (더 강하게)
+
+omega = 2 * np.pi * 1.88
+target_energy = 420.0         # 목표 에너지 상향
+
+# Spectral Setup
+X, Y = np.meshgrid(np.arange(Nx), np.arange(Ny))
+kx = 2*np.pi * fftfreq(Nx, d=1.0)
+ky = 2*np.pi * fftfreq(Ny, d=1.0)
+KX, KY = np.meshgrid(kx, ky)
+K2 = KX**2 + KY**2
+
+# Serpentine Mask
+def create_serpentine_mask(nx, ny, num_turns=9, width=24):
+    mask = np.zeros((ny, nx), dtype=float)
+    for i in range(num_turns):
+        xs = int(i * nx / num_turns)
+        xe = int((i + 1) * nx / num_turns)
+        cy = ny//4 if i % 2 == 0 else 3*ny//4
+        path_y = cy + (ny//5.6) * np.sin(2*np.pi*i/num_turns + 13*np.pi*np.arange(nx)/nx)
+        for xi in range(xs, min(xe, nx)):
+            yc = int(path_y[xi])
+            ymin = max(0, yc - width//2)
+            ymax = min(ny, yc + width//2 + 1)
+            mask[ymin:ymax, xi] = 1.0
+    return mask
+
+serpentine_mask = create_serpentine_mask(Nx, Ny)
+
+# 1차와 2차 Singularity (2회 통과 유도)
+sing_1st = [(int(0.25*Nx), Ny//2 - 25), (int(0.52*Nx), Ny//2 + 28)]
+sing_2nd = [(int(0.70*Nx), Ny//2 - 20), (int(0.88*Nx), Ny//2 + 22)]
+
+all_sing = sing_1st + sing_2nd
+
+# 초기 pulse
+psi = np.zeros((Ny, Nx), dtype=complex)
+pulse = np.exp(-((X - Nx//6)**2 + (Y - Ny//2)**2) / (2*15**2))
+psi += 1.4 * pulse * np.exp(1j * 2.05 * X)
+
+psi_hat = fft2(psi)
+psi_hat_prev = psi_hat.copy()
+
+energy_history = []
+time_steps = []
+
+# ====================== Update Step (2회 통과 강화) ======================
+def update_step(psi_hat, psi_hat_prev, t):
+    psi_real = ifft2(psi_hat)
+
+    # Drive
+    drive = np.zeros_like(psi_real, dtype=float)
+    for sx, sy in all_sing:
+        phase = omega * t + 0.58*(X - sx) + 0.92*(Y - sy)
+        drive += np.sin(phase) * np.exp(-((X-sx)**2 + (Y-sy)**2) / (2*39**2))
+    drive *= serpentine_mask * 0.14
+
+    linear = -K2 * psi_hat
+
+    psi_new = ifft2(psi_hat).copy()
+
+    # 1차 통과
+    for sx, sy in sing_1st:
+        dist = np.sqrt((X - sx)**2 + (Y - sy)**2)
+        region = (dist < 40) & (serpentine_mask > 0.25)
+        psi_new[region] *= np.exp(1j * np.pi)
+        
+        compression = np.exp(-dist**2 / (2*29**2))
+        re_emitted = feedback_strength * compression * psi_new * np.exp(-1j * 2.15)
+        psi_new += re_emitted * 1.45
+
+    # 2차 통과 (더 강한 재주입)
+    for sx, sy in sing_2nd:
+        dist = np.sqrt((X - sx)**2 + (Y - sy)**2)
+        region = (dist < 36) & (serpentine_mask > 0.22)
+        psi_new[region] *= np.exp(1j * np.pi)
+        
+        compression = np.exp(-dist**2 / (2*24**2))
+        re_emitted = second_pass_strength * compression * psi_new * np.exp(-1j * 2.45)
+        psi_new += re_emitted * 1.75   # 2회차 강하게
+
+    psi_new += drive * dt * 1.6
+    psi_new_hat = fft2(psi_new)
+
+    # Leap-Frog + weak damping
+    psi_hat_new = 2*psi_hat - psi_hat_prev + dt**2 * linear + dt**2 * fft2(drive)
+    psi_hat_new *= 0.99975
+
+    # 강제 Energy Normalization
+    current_e = np.sum(np.abs(ifft2(psi_hat_new))**2)
+    if current_e > 0:
+        scale = np.sqrt(target_energy / current_e)
+        psi_hat_new *= scale * 0.96
+
+    return psi_hat_new, psi_hat
+
+# ====================== Visualization ======================
+fig = plt.figure(figsize=(16.5, 10))
+ax1 = fig.add_subplot(2, 2, 1)
+ax2 = fig.add_subplot(2, 2, 2)
+ax3 = fig.add_subplot(2, 2, 3)
+
+im_int = ax1.imshow(np.abs(ifft2(psi_hat))**2, cmap='inferno', origin='lower', vmin=0, vmax=4.5)
+im_phase = ax2.imshow(np.angle(ifft2(psi_hat)), cmap='twilight_shifted', origin='lower', vmin=-np.pi, vmax=np.pi)
+
+line_energy, = ax3.plot([], [], 'c-', lw=2.8)
+ax3.set_title('Total Energy Conservation')
+
+# Singularity 표시
+for sx, sy in sing_1st:
+    ax1.plot(sx, sy, 'o', color='cyan', markersize=11, markeredgecolor='white')
+    ax2.plot(sx, sy, 'o', color='cyan', markersize=11, markeredgecolor='white')
+for sx, sy in sing_2nd:
+    ax1.plot(sx, sy, 'o', color='magenta', markersize=11, markeredgecolor='white')
+    ax2.plot(sx, sy, 'o', color='magenta', markersize=11, markeredgecolor='white')
+
+suptitle = fig.suptitle(f"Möbius 2회 통과 강화 v2\n"
+                        f"1st={feedback_strength:.2f} | 2nd={second_pass_strength:.2f} | "
+                        f"ω={omega/(2*np.pi):.2f} THz", fontsize=14)
+
+plt.tight_layout(rect=[0, 0, 1, 0.93])
+
+def animate(frame):
+    global psi_hat, psi_hat_prev
+    t = frame * dt
+    psi_hat_new, _ = update_step(psi_hat, psi_hat_prev, t)
+    
+    psi_hat_prev = psi_hat.copy()
+    psi_hat = psi_hat_new
+    
+    psi_real = ifft2(psi_hat)
+    intensity = np.abs(psi_real)**2
+    
+    im_int.set_array(intensity)
+    im_phase.set_array(np.angle(psi_real))
+    
+    current_energy = np.sum(intensity)
+    energy_history.append(current_energy)
+    time_steps.append(frame)
+    
+    line_energy.set_data(time_steps, energy_history)
+    ax3.relim()
+    ax3.autoscale_view()
+    
+    suptitle.set_text(f"Möbius 2회 통과 강화 v2\n"
+                      f"1st={feedback_strength:.2f} | 2nd={second_pass_strength:.2f} | "
+                      f"ω={omega/(2*np.pi):.2f} THz | Energy={current_energy:.1f}")
+    
+    return [im_int, im_phase, line_energy, suptitle]
+
+ani = animation.FuncAnimation(fig, animate, frames=1800, interval=40, blit=False, repeat=False)
+plt.show()
